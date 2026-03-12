@@ -1,0 +1,76 @@
+﻿@page "/analyze"
+@using Microsoft.AspNetCore.Components.Forms
+@using global::DocumentAnalyzer.Services
+@inject DocumentProcessor DocumentProcessor
+
+<h3>Document Analyzer</h3>
+
+<InputFile OnChange="OnFileSelected" accept=".pdf,.docx" />
+
+<br />
+<br />
+
+<button @onclick="AnalyzeAsync" disabled="@(_file == null || _isProcessing)">
+    @(_isProcessing ? "Analyzing..." : "Analyze")
+</button>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <p style="color:red">@_error</p>
+}
+
+@if (!string.IsNullOrWhiteSpace(_result))
+{
+    <hr />
+    <h4>AI Response</h4>
+    <pre style="white-space: pre-wrap;">@_result</pre>
+}
+
+@code {
+    private IBrowserFile? _file;
+    private string? _result;
+    private string? _error;
+    private bool _isProcessing;
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        _result = null;
+
+        _file = e.File;
+
+        var ext = Path.GetExtension(_file.Name).ToLowerInvariant();
+        if (ext != ".pdf" && ext != ".docx")
+        {
+            _error = "Only PDF or DOCX files are supported.";
+            _file = null;
+        }
+    }
+
+    private async Task AnalyzeAsync()
+    {
+        if (_file == null)
+            return;
+
+        _isProcessing = true;
+        _error = null;
+
+        try
+        {
+            using var memoryStream = new MemoryStream();
+            await _file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024)
+                       .CopyToAsync(memoryStream);
+            memoryStream.Position = 0;
+
+            _result = await DocumentProcessor.ProcessAsync(memoryStream, _file.Name);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+}
